@@ -182,7 +182,7 @@ pagina = st.sidebar.radio(
     ["Inicio y línea de tiempo", "EDA", "Modelo y predicciones"]
 )
 
-# ---------- PÁGINAS (Por brevedad, omito el contenido estático de otras páginas) ----------
+# ---------- PÁGINAS (CONTENIDO OMITIDO PARA BREVEDAD) ----------
 if pagina == "Inicio y línea de tiempo":
     st.title("Volatilidad del Tipo de Cambio de Venta (TC)")
     st.subheader("Introducción")
@@ -329,11 +329,11 @@ elif pagina == "Modelo y predicciones":
     
     simulated_values = {}
     
-    # 🚨 FIX CRÍTICO: Control de flujo para evitar st.columns(0)
-    # Se crea el contenedor de sliders solo si hay variables válidas para simular.
+    # 🚨 FIX CRÍTICO ESTRUCTURAL: Solución definitiva para StreamlitInvalidColumnSpecError
+    # Creamos el contenedor de sliders solo si hay variables válidas para simular.
     if len(sim_vars_actual) > 0:
         
-        # Crear columnas solo si hay variables que simular
+        # Esta es la línea que fallaba: ahora está garantizada a ser > 0
         cols_sim = st.columns(len(sim_vars_actual))
         
         # Generar Sliders para variables clave
