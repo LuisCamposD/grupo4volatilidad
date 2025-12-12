@@ -8,7 +8,6 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # --- VARIABLES CLAVE PARA SIMULACIÓN ---
 # 🚨 AJUSTE FINAL: Estos nombres deben coincidir con tus columnas reales en el CSV.
-# Usaremos las que mostraste en el log.
 KEY_SIMULATION_VARS = [
     "precio_cobre",
     "reservas",
@@ -188,7 +187,6 @@ if pagina == "Inicio y línea de tiempo":
     st.title("Volatilidad del Tipo de Cambio de Venta (TC)")
     st.subheader("Introducción")
     
-    # ... Contenido estático ... (Puedes rellenar aquí si es necesario)
     st.write("...") 
 
     # Histórico TC
@@ -217,7 +215,6 @@ if pagina == "Inicio y línea de tiempo":
         
 elif pagina == "EDA":
     st.title("Análisis Exploratorio de Datos (EDA)")
-    # ... Contenido estático ...
     st.write("...")
 
 
@@ -328,12 +325,12 @@ elif pagina == "Modelo y predicciones":
     st.markdown("#### Valores de Simulación para el Período Futuro")
     
     # Filtramos KEY_SIMULATION_VARS a solo las que estén realmente en selected_vars
-    # Usamos ultimo_X_base.index porque ese DataFrame tiene los features listos
     sim_vars_actual = [var for var in KEY_SIMULATION_VARS if var in ultimo_X_base.index and var in selected_vars]
     
     simulated_values = {}
     
     # 🚨 FIX CRÍTICO: Control de flujo para evitar st.columns(0)
+    # Se crea el contenedor de sliders solo si hay variables válidas para simular.
     if len(sim_vars_actual) > 0:
         
         # Crear columnas solo si hay variables que simular
@@ -362,8 +359,7 @@ elif pagina == "Modelo y predicciones":
                 )
     else:
         st.warning(
-            f"⚠️ Ninguna variable clave ({', '.join(KEY_SIMULATION_VARS)}) fue encontrada en el modelo. "
-            "Se usarán los últimos valores históricos para todas las predicciones."
+            f"⚠️ Ninguna variable clave fue encontrada. Se usarán los últimos valores históricos."
         )
 
 
