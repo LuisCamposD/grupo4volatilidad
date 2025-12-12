@@ -1,0 +1,8 @@
+numpy
+pandas
+matplotlib
+seaborn
+statsmodels  # (Si usaste GARCH, ARIMA, etc.)
+scikit-learn # (Si usaste modelos ML estándar)
+tensorflow # (Si usaste redes neuronales)
+streamlit # (Necesario para la App)
