@@ -7,7 +7,7 @@ import seaborn as sns
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # --- VARIABLES CLAVE PARA SIMULACIÓN ---
-# 🚨 AJUSTE FINAL: Estos nombres deben coincidir con tus columnas reales en el CSV.
+# AJUSTE FINAL: Estos nombres coinciden con tus columnas reales en el CSV.
 KEY_SIMULATION_VARS = [
     "precio_cobre",
     "reservas",
@@ -333,6 +333,7 @@ elif pagina == "Modelo y predicciones":
     num_cols = len(sim_vars_actual)
     
     # Aseguramos un mínimo de 1 columna para que Streamlit no falle en el pre-renderizado
+    # ESTA LÍNEA DEBE SER LA ÚNICA QUE LLAMA A st.columns en esta sección.
     cols_sim = st.columns(num_cols if num_cols > 0 else 1)
     
     if num_cols > 0:
