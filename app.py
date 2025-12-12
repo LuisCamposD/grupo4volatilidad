@@ -7,14 +7,14 @@ import seaborn as sns
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # --- VARIABLES CLAVE PARA SIMULACIÓN ---
-# 🚨 IMPORTANTE: Revisa el contenido de tu 'selected_vars_volatilidad.pkl'.
-# Los nombres deben coincidir EXACTAMENTE (mayúsculas/minúsculas) con los de tu CSV.
-# Ejemplo, si tu CSV tiene 'precio_cobre' en minúsculas, úsalo aquí.
+# 🚨 AJUSTE FINAL: Estos nombres deben coincidir con tus columnas reales en el CSV.
+# Usaremos las que mostraste en el log.
 KEY_SIMULATION_VARS = [
     "precio_cobre",
     "reservas",
-    "Tasa_Referencia",
-    # Añade o ajusta los nombres de las variables macroeconómicas más importantes
+    "precio_zinc",
+    "pbi",
+    # Si quieres simular "Inflación PERU", añádelo aquí, respetando mayúsculas/minúsculas
 ]
 # ---------------------------------------
 
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # --------------------------------------------------------------------
-# CONSTANTES: TIMELINE + MAPA DE MESES (Sin cambios, son constantes de la interfaz)
+# CONSTANTES: TIMELINE + MAPA DE MESES
 # --------------------------------------------------------------------
 IMAGES = [
     "https://raw.githubusercontent.com/LuisCamposD/timeline_s1/main/timeline_images/img1.jpg",
@@ -91,11 +91,11 @@ def cargar_recursos():
         st.stop()
     except Exception as e:
         st.error(f"Error al cargar recursos: {e}")
-        st.exception(e) # Mostrar la excepción completa en los logs
+        st.exception(e) 
         st.stop()
 
 
-    # Detectar columna TC
+    # Detectar columna TC (Nivel)
     posibles_tc = [
         "TC", "tc", "TC_venta", "tc_venta",
         "Tipo de cambio - TC Sistema bancario SBS (S/ por US$) - Venta",
@@ -117,11 +117,9 @@ def cargar_recursos():
                 break
 
     if tc_col is None:
-        # Si la columna TC no se encuentra (el problema que ya encontramos y resolvimos),
-        # lanzamos un error claro.
         raise KeyError(
-            f"No se encontró la columna de Tipo de Cambio en el CSV. "
-            f"Columna TC usada: {tc_col}. Columnas disponibles: {list(df.columns)}"
+            f"No se encontró la columna de Tipo de Cambio (nivel TC) en el CSV. "
+            f"Esto es necesario para iniciar la predicción recursiva. Columnas disponibles: {list(df.columns)}"
         )
 
     # Crear fecha y ordenar
@@ -146,7 +144,7 @@ def cargar_recursos():
     # Rendimientos logarítmicos
     df_mod = df.copy()
     
-    # LÍNEA DE SEGURIDAD: Convertir columnas numéricas a float antes del cálculo
+    # LÍNEA DE SEGURIDAD: Convertir columnas numéricas a float
     for col in df_mod.columns:
         if col not in ["fecha", "mes"]: 
             df_mod[col] = pd.to_numeric(df_mod[col], errors='coerce') 
@@ -162,7 +160,7 @@ st.write("🔄 Inicializando app y cargando recursos...")
 try:
     modelo, imputer, scaler, selected_vars, df, df_mod, tc_col = cargar_recursos()
 except Exception as e:
-    st.error("❌ Error cargando los recursos (modelo, datos o transformaciones). Por favor, revise los logs.")
+    st.error("❌ Error cargando los recursos (modelo, datos o transformaciones). Por favor, revise los logs de la app.")
     st.exception(e)
     st.stop()
 
@@ -171,7 +169,9 @@ except Exception as e:
 # Extracción de valores base para la simulación
 # --------------------------------------------------------------------
 df_ordenado = df.sort_values("fecha").reset_index(drop=True)
-ultimo_X_base = df_mod.iloc[-1].copy() # Cambiado a iloc[-1] para capturar todos los features en el índice correcto
+
+# Último registro usado para entrenar, conteniendo los features
+ultimo_X_base = df_mod[selected_vars].iloc[-1].copy() 
 ultimo_tc_base = df_ordenado[tc_col].iloc[-1]
 
 # --------------------------------------------------------------------
@@ -183,8 +183,43 @@ pagina = st.sidebar.radio(
     ["Inicio y línea de tiempo", "EDA", "Modelo y predicciones"]
 )
 
-# ---------- PÁGINAS (CONTENIDO OMITIDO POR SER ESTÁTICO) ----------
-# ...
+# ---------- PÁGINAS (Por brevedad, omito el contenido estático de otras páginas) ----------
+if pagina == "Inicio y línea de tiempo":
+    st.title("Volatilidad del Tipo de Cambio de Venta (TC)")
+    st.subheader("Introducción")
+    
+    # ... Contenido estático ... (Puedes rellenar aquí si es necesario)
+    st.write("...") 
+
+    # Histórico TC
+    st.markdown("---")
+    st.subheader("Histórico del tipo de cambio")
+
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(df_ordenado["fecha"], df_ordenado[tc_col], marker="o", linewidth=1)
+        ax.set_title("Evolución del Tipo de Cambio de Venta")
+        ax.set_xlabel("Fecha")
+        ax.set_ylabel("TC (S/.)")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    with col2:
+        st.write("**Resumen rápido:**")
+        st.write(f"- Observaciones: {len(df_ordenado)}") 
+        st.write(f"- TC mínimo: {df_ordenado[tc_col].min():.4f}")
+        st.write(f"- TC máximo: {df_ordenado[tc_col].max():.4f}")
+        st.write(f"- TC promedio: {df_ordenado[tc_col].mean():.4f}")
+        st.info("La línea de tiempo nos permite ubicar periodos de estabilidad y volatilidad.")
+        
+elif pagina == "EDA":
+    st.title("Análisis Exploratorio de Datos (EDA)")
+    # ... Contenido estático ...
+    st.write("...")
+
 
 # --------------------------------------------------------------------
 # Página: Modelo y predicciones
@@ -195,19 +230,17 @@ elif pagina == "Modelo y predicciones":
     # 5.1 Performance del modelo
     st.subheader("Performance del modelo (Evaluación Histórica)")
 
-    X = df_mod # Contiene todas las columnas necesarias
+    X = df_mod 
     y = df_mod["Rendimientos_log"]
 
     train_size = int(len(X) * 0.8)
     X_test = X.iloc[train_size:]
     y_test = y.iloc[train_size:]
     
-    # -------------------------------------------------------------------
     # FIX: Asegurar el orden de las columnas y el tipo de dato (float) para SKLEARN
-    # -------------------------------------------------------------------
-    X_test_correct_order = X_test[selected_vars] # Asegura orden
-    X_test_data = X_test_correct_order.values.astype(float) # Forzar a float array
-    X_test_imp = imputer.transform(X_test_data) # <--- La línea que causaba el error con tipo de dato
+    X_test_correct_order = X_test[selected_vars] 
+    X_test_data = X_test_correct_order.values.astype(float) 
+    X_test_imp = imputer.transform(X_test_data) 
     
     X_test_scaled = scaler.transform(X_test_imp)
     y_pred_test = modelo.predict(X_test_scaled)
@@ -295,6 +328,7 @@ elif pagina == "Modelo y predicciones":
     st.markdown("#### Valores de Simulación para el Período Futuro")
     
     # Filtramos KEY_SIMULATION_VARS a solo las que estén realmente en selected_vars
+    # Usamos ultimo_X_base.index porque ese DataFrame tiene los features listos
     sim_vars_actual = [var for var in KEY_SIMULATION_VARS if var in ultimo_X_base.index and var in selected_vars]
     
     simulated_values = {}
@@ -311,7 +345,7 @@ elif pagina == "Modelo y predicciones":
             
             # Definir un rango razonable basado en el último valor
             min_val = last_value * 0.9 if last_value > 0 else last_value - abs(last_value * 0.1)
-            max_val = last_value * 1.1 if last_value > 0 else last_val + abs(last_val * 0.1)
+            max_val = last_value * 1.1 if last_value > 0 else last_value + abs(last_value * 0.1)
             
             # Usar 4 decimales si el valor es muy pequeño
             step_val = 0.0001 if abs(last_value) < 1.0 else 0.01
@@ -328,7 +362,8 @@ elif pagina == "Modelo y predicciones":
                 )
     else:
         st.warning(
-            "⚠️ Ninguna variable clave fue encontrada. Se usarán los últimos valores históricos."
+            f"⚠️ Ninguna variable clave ({', '.join(KEY_SIMULATION_VARS)}) fue encontrada en el modelo. "
+            "Se usarán los últimos valores históricos para todas las predicciones."
         )
 
 
@@ -363,7 +398,7 @@ elif pagina == "Modelo y predicciones":
                 if col in ["anio", "mes_num"]:
                     continue
                 
-                # Asigna valor simulado si existe, si no, usa el último valor histórico (ultimo_X_base)
+                # Asigna valor simulado si existe, si no, usa el último valor histórico
                 if col in simulated_values:
                     df_futuro[col] = simulated_values[col]
                 else:
