@@ -329,13 +329,13 @@ elif pagina == "Modelo y predicciones":
     
     simulated_values = {}
     
-    # 🚨 FIX CRÍTICO ESTRUCTURAL: Solución definitiva para StreamlitInvalidColumnSpecError
-    # Creamos el contenedor de sliders solo si hay variables válidas para simular.
-    if len(sim_vars_actual) > 0:
-        
-        # Esta es la línea que fallaba: ahora está garantizada a ser > 0
-        cols_sim = st.columns(len(sim_vars_actual))
-        
+    # 🚨 FIX CRÍTICO ESTRUCTURAL: Garantiza que st.columns() reciba un valor > 0
+    num_cols = len(sim_vars_actual)
+    
+    # Aseguramos un mínimo de 1 columna para que Streamlit no falle en el pre-renderizado
+    cols_sim = st.columns(num_cols if num_cols > 0 else 1)
+    
+    if num_cols > 0:
         # Generar Sliders para variables clave
         for i, var in enumerate(sim_vars_actual):
             last_value = ultimo_X_base[var]
@@ -358,8 +358,9 @@ elif pagina == "Modelo y predicciones":
                     key=f"sim_{var}"
                 )
     else:
-        st.warning(
-            f"⚠️ Ninguna variable clave fue encontrada. Se usarán los últimos valores históricos."
+        # Si num_cols es 0, usamos la única columna creada (cols_sim[0]) para mostrar el warning
+        cols_sim[0].warning(
+            f"⚠️ Ninguna variable clave ({', '.join(KEY_SIMULATION_VARS)}) fue encontrada. Se usarán los últimos valores históricos."
         )
 
 
