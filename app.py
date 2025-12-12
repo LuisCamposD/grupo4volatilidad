@@ -184,6 +184,14 @@ def cargar_recursos():
 
     # Rendimientos logarítmicos
     df_mod = df.copy()
+    
+    # 💡 LÍNEA DE SEGURIDAD: Coercer todas las columnas a float antes de cualquier cálculo
+    # Esto ayuda a prevenir el error self._fill_dtype si el CSV trae datos con formatos inesperados
+    for col in df_mod.columns:
+        # Solo intentar convertir si no es una columna de fecha o mes (que ya se han manejado)
+        if col not in ["fecha", "mes"]: 
+            df_mod[col] = pd.to_numeric(df_mod[col], errors='coerce') 
+
     df_mod["Rendimientos_log"] = np.log(df_mod[tc_col] / df_mod[tc_col].shift(1))
     df_mod = df_mod.dropna(subset=["Rendimientos_log"])
 
@@ -386,10 +394,11 @@ elif pagina == "Modelo y predicciones":
     y_test = y.iloc[train_size:]
     
     # -------------------------------------------------------------------
-    # 💡 CORRECCIÓN CRÍTICA: Asegurar el orden de las columnas con selected_vars
+    # 💡 FIX: Asegurar el orden de las columnas y el tipo de dato (float)
     # -------------------------------------------------------------------
-    X_test_correct_order = X_test[selected_vars] # Asegura orden y tipos de datos
-    X_test_imp = imputer.transform(X_test_correct_order)
+    X_test_correct_order = X_test[selected_vars] # Asegura orden
+    X_test_data = X_test_correct_order.values.astype(float) # Forzar a float array
+    X_test_imp = imputer.transform(X_test_data)
     
     X_test_scaled = scaler.transform(X_test_imp)
     y_pred_test = modelo.predict(X_test_scaled)
@@ -400,7 +409,8 @@ elif pagina == "Modelo y predicciones":
     
     # Evaluación en todo el histórico (in-sample)
     X_all_correct_order = X[selected_vars]
-    X_all_imp = imputer.transform(X_all_correct_order)
+    X_all_data = X_all_correct_order.values.astype(float) # Forzar a float array
+    X_all_imp = imputer.transform(X_all_data)
     
     X_all_scaled = scaler.transform(X_all_imp)
     y_pred_all = modelo.predict(X_all_scaled)
@@ -516,7 +526,6 @@ elif pagina == "Modelo y predicciones":
             anio_actual = int(anio_input)
 
             # Si el mes de inicio es el último mes de la historia, la proyección comienza al mes siguiente
-            # Esto corrige el problema de empezar en un mes que ya está en la historia
             if anio_actual == ultimo_anio and mes_actual == MAPA_MESES.get(ultimo_mes_nombre):
                 mes_actual += 1
                 if mes_actual > 12:
@@ -549,10 +558,11 @@ elif pagina == "Modelo y predicciones":
 
 
             # -----------------------------------------------------------
-            # 💡 CORRECCIÓN CRÍTICA: Asegurar el orden de las columnas con selected_vars
+            # 💡 FIX: Asegurar el orden de las columnas y el tipo de dato (float)
             # -----------------------------------------------------------
             X_fut_correct_order = df_futuro[selected_vars]
-            X_fut_imp = imputer.transform(X_fut_correct_order)
+            X_fut_data = X_fut_correct_order.values.astype(float) # Forzar a float array
+            X_fut_imp = imputer.transform(X_fut_data)
             
             X_fut_scaled = scaler.transform(X_fut_imp)
 
@@ -583,7 +593,7 @@ elif pagina == "Modelo y predicciones":
             st.dataframe(df_display, use_container_width=True)
 
             # -----------------------------------------------------------
-            # GRÁFICO FINAL (El formato solicitado de forecast)
+            # GRÁFICO FINAL
             # -----------------------------------------------------------
             fig, ax = plt.subplots(figsize=(10, 4))
             
