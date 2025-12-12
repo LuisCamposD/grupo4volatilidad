@@ -273,7 +273,7 @@ if pagina == "Inicio y línea de tiempo":
 
     with col2:
         st.write("**Resumen rápido:**")
-        st.write(f"- Observaciones: {len[df_tc] if False else len(df_tc)}")
+        st.write(f"- Observaciones: {len(df_tc)}")
         st.write(f"- TC mínimo: {df_tc[tc_col].min():.4f}")
         st.write(f"- TC máximo: {df_tc[tc_col].max():.4f}")
         st.write(f"- TC promedio: {df_tc[tc_col].mean():.4f}")
@@ -385,14 +385,9 @@ elif pagina == "Modelo y predicciones":
     plt.tight_layout()
     st.pyplot(fig)
 
-    # 5.2 Predicción futura (misma lógica que en Colab)
+    # 5.2 Predicción futura simple (sin simulación)
     st.markdown("---")
-    st.subheader("Predicción de varios meses hacia adelante")
-
-    st.write("""
-    Selecciona el *año y el mes de inicio* para proyectar el tipo de cambio varios meses hacia adelante.
-    La predicción que se muestra es **directamente** la salida del modelo, usando la misma lógica que en el notebook.
-    """)
+    st.subheader("Predicciones futuras (sin simulación de variables)")
 
     df_ordenado = df.sort_values("fecha").reset_index(drop=True)
 
@@ -411,86 +406,216 @@ elif pagina == "Modelo y predicciones":
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
-        anio_input = st.number_input(
-            "Año de inicio de la predicción",
+        anio_input_simple = st.number_input(
+            "Año de inicio (predicción simple)",
             min_value=ultimo_anio,
             max_value=ultimo_anio + 10,
             value=ultimo_anio,
             step=1,
         )
     with col_b:
-        mes_nombre = st.selectbox(
-            "Mes de inicio",
+        mes_nombre_simple = st.selectbox(
+            "Mes de inicio (predicción simple)",
             options=meses_nombres,
             index=idx_mes_default,
+            key="mes_simple",
         )
-        mes_inicio = MAPA_MESES[mes_nombre]
+        mes_inicio_simple = MAPA_MESES[mes_nombre_simple]
     with col_c:
-        num_meses = st.slider("Número de meses a predecir", 1, 24, 5)
+        num_meses_simple = st.slider(
+            "Número de meses a predecir (simple)", 1, 24, 5, key="nmes_simple"
+        )
 
-    if st.button("Calcular predicción"):
-        # Último registro de features y último TC histórico
+    if st.button("Calcular predicción simple"):
         ultimo_X = df_mod[selected_vars].iloc[-1].copy()
         ultimo_tc = df_ordenado[tc_col].iloc[-1]
 
-        # Generar lista de (anio, mes_num) futuros
         meses_futuro = []
-        mes_actual = mes_inicio
-        anio_actual = int(anio_input)
+        mes_actual = mes_inicio_simple
+        anio_actual = int(anio_input_simple)
 
-        for _ in range(num_meses):
+        for _ in range(num_meses_simple):
             meses_futuro.append((anio_actual, mes_actual))
             mes_actual += 1
             if mes_actual > 12:
                 mes_actual = 1
                 anio_actual += 1
 
-        # DataFrame con años y meses futuros
         df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
 
-        # Copiar variables predictoras del último registro,
-        # SIN sobrescribir 'anio' ni 'mes_num' que ya tienen los valores futuros
         for col in selected_vars:
             if col in ["anio", "mes_num"]:
                 continue
             df_futuro[col] = ultimo_X[col]
 
-        # Imputar + escalar igual que en el entrenamiento
         X_fut_imp = imputer.transform(df_futuro[selected_vars])
         X_fut_scaled = scaler.transform(X_fut_imp)
-
-        # Predicción directa de rendimientos logarítmicos (igual que en Colab)
         rendimientos_pred = modelo.predict(X_fut_scaled)
 
-        # Reconstrucción del tipo de cambio a partir del último TC histórico
         tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
         for r in rendimientos_pred[1:]:
             tc_pred.append(tc_pred[-1] * np.exp(r))
 
         df_futuro["TC_predicho"] = tc_pred
 
-        # Mapear número de mes a nombre
         mes_dict_inv = {v: k for k, v in MAPA_MESES.items()}
         df_futuro["mes"] = df_futuro["mes_num"].map(mes_dict_inv)
         df_futuro["anio"] = df_futuro["anio"].astype(int)
 
-        st.write("### Predicciones futuras")
+        st.write("### Predicciones futuras (simple)")
         st.dataframe(df_futuro[["anio", "mes", "TC_predicho"]])
 
         fig, ax = plt.subplots(figsize=(10, 4))
         x_hist = np.arange(len(df_ordenado))
         ax.plot(x_hist, df_ordenado[tc_col], label="TC real (histórico)")
 
-        x_fut = np.arange(len(df_ordenado), len(df_ordenado) + num_meses)
+        x_fut = np.arange(len(df_ordenado), len(df_ordenado) + num_meses_simple)
         ax.plot(
             x_fut,
             df_futuro["TC_predicho"],
-            label=f"TC predicho ({num_meses} meses desde {mes_nombre}/{int(anio_input)})",
+            label=f"TC predicho ({num_meses_simple} meses desde {mes_nombre_simple}/{int(anio_input_simple)})",
             marker="o",
         )
 
         ax.set_title(
-            f"Predicción del Tipo de Cambio - {num_meses} meses desde {mes_nombre}/{int(anio_input)}"
+            f"Predicción del Tipo de Cambio - {num_meses_simple} meses desde {mes_nombre_simple}/{int(anio_input_simple)}"
+        )
+        ax.set_xlabel("Meses")
+        ax.set_ylabel("Tipo de cambio (S/ por US$)")
+        ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    # 5.3 Predicción con simulación de variables
+    st.markdown("---")
+    st.subheader("Predicción de varios meses hacia adelante con Simulación de Variables")
+
+    st.write("""
+    Para obtener una predicción realista, puedes **simular los valores futuros** de las variables clave.
+    Las variables que no simules se mantendrán en su último valor histórico.
+    """)
+
+    # Año y mes de inicio para simulación (normalmente después del último dato)
+    ultimo_anio_hist = int(df_ordenado["anio"].iloc[-1])
+    ultimo_mes_num_hist = int(df_ordenado["mes_num"].iloc[-1])
+    mes_inicio_default_num = ultimo_mes_num_hist + 1
+    if mes_inicio_default_num > 12:
+        mes_inicio_default_num = 1
+        ultimo_anio_hist += 1
+    mes_inicio_default_nombre = [k for k, v in MAPA_MESES.items() if v == mes_inicio_default_num][0]
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+    with col_s1:
+        anio_input_sim = st.number_input(
+            "Año de inicio de la predicción",
+            min_value=ultimo_anio_hist - 1,
+            max_value=ultimo_anio_hist + 10,
+            value=ultimo_anio_hist,
+            step=1,
+        )
+    with col_s2:
+        mes_nombre_sim = st.selectbox(
+            "Mes de inicio (normalmente el mes siguiente al último dato)",
+            options=meses_nombres,
+            index=meses_nombres.index(mes_inicio_default_nombre),
+            key="mes_sim",
+        )
+        mes_inicio_sim = MAPA_MESES[mes_nombre_sim]
+    with col_s3:
+        num_meses_sim = st.slider(
+            "Número de meses a predecir (simulación)", 1, 24, 6, key="nmes_sim"
+        )
+
+    st.markdown("### Valores de Simulación para el Período Futuro")
+
+    # Variables candidatas a simular (excluimos tiempo y target)
+    sim_vars_candidatas = [
+        v for v in selected_vars
+        if v not in ["anio", "mes", "mes_num", "Rendimientos_log"]
+    ]
+    sim_vars_actual = [v for v in sim_vars_candidatas if v in df_mod.columns]
+
+    sim_inputs = {}
+
+    if len(sim_vars_actual) == 0:
+        st.info(
+            "No hay variables disponibles para simular (aparte de año/mes). "
+            "Se usarán los últimos valores históricos para todas las variables."
+        )
+    else:
+        cols_sim = st.columns(len(sim_vars_actual))
+        for col, var in zip(cols_sim, sim_vars_actual):
+            with col:
+                delta = st.number_input(
+                    f"{var} (Δ% vs último mes)",
+                    min_value=-50.0,
+                    max_value=50.0,
+                    value=0.0,
+                    step=1.0,
+                    key=f"sim_{var}",
+                )
+            sim_inputs[var] = delta
+
+    if st.button("Calcular predicción con simulación"):
+        ultimo_X = df_mod[selected_vars].iloc[-1].copy()
+        ultimo_tc = df_ordenado[tc_col].iloc[-1]
+
+        meses_futuro_sim = []
+        mes_actual = mes_inicio_sim
+        anio_actual = int(anio_input_sim)
+
+        for _ in range(num_meses_sim):
+            meses_futuro_sim.append((anio_actual, mes_actual))
+            mes_actual += 1
+            if mes_actual > 12:
+                mes_actual = 1
+                anio_actual += 1
+
+        df_futuro_sim = pd.DataFrame(meses_futuro_sim, columns=["anio", "mes_num"])
+
+        # Copiar variables y aplicar simulación donde corresponda
+        for col in selected_vars:
+            if col in ["anio", "mes_num"]:
+                continue
+
+            base = ultimo_X[col]
+
+            if col in sim_inputs:
+                df_futuro_sim[col] = base * (1 + sim_inputs[col] / 100.0)
+            else:
+                df_futuro_sim[col] = base
+
+        X_fut_imp_sim = imputer.transform(df_futuro_sim[selected_vars])
+        X_fut_scaled_sim = scaler.transform(X_fut_imp_sim)
+        rendimientos_pred_sim = modelo.predict(X_fut_scaled_sim)
+
+        tc_pred_sim = [ultimo_tc * np.exp(rendimientos_pred_sim[0])]
+        for r in rendimientos_pred_sim[1:]:
+            tc_pred_sim.append(tc_pred_sim[-1] * np.exp(r))
+
+        df_futuro_sim["TC_predicho"] = tc_pred_sim
+
+        mes_dict_inv = {v: k for k, v in MAPA_MESES.items()}
+        df_futuro_sim["mes"] = df_futuro_sim["mes_num"].map(mes_dict_inv)
+        df_futuro_sim["anio"] = df_futuro_sim["anio"].astype(int)
+
+        st.write("### Escenario de predicción futura (con simulación)")
+        st.dataframe(df_futuro_sim[["anio", "mes", "TC_predicho"]])
+
+        fig, ax = plt.subplots(figsize=(10, 4))
+        x_hist = np.arange(len(df_ordenado))
+        ax.plot(x_hist, df_ordenado[tc_col], label="TC real (histórico)")
+
+        x_fut_sim = np.arange(len(df_ordenado), len(df_ordenado) + num_meses_sim)
+        ax.plot(
+            x_fut_sim,
+            df_futuro_sim["TC_predicho"],
+            label=f"TC predicho ({num_meses_sim} meses desde {mes_nombre_sim}/{int(anio_input_sim)})",
+            marker="o",
+        )
+
+        ax.set_title(
+            f"Predicción del Tipo de Cambio - {num_meses_sim} meses desde {mes_nombre_sim}/{int(anio_input_sim)} (simulación)"
         )
         ax.set_xlabel("Meses")
         ax.set_ylabel("Tipo de cambio (S/ por US$)")
