@@ -3,5 +3,5 @@ pandas
 numpy
 matplotlib
 seaborn
-scikit-learn==1.4.2
+scikit-learn==1.5.0  # <--- Usamos la última estable para asegurar la compatibilidad
 joblib
