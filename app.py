@@ -6,17 +6,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-sns.set(style="whitegrid")
-
-# --- Variables que el usuario DEBE SIMULAR ---
-# Revisa tu archivo 'selected_vars_volatilidad.pkl' y ajusta estos nombres
-# Si alguna de estas no está en tu lista, el código la ignorará.
+# --- VARIABLES CLAVE PARA SIMULACIÓN ---
+# DEBES REVISAR TU selected_vars_volatilidad.pkl y ajustar estos nombres
+# para que coincidan con las variables que más influyen en tu modelo.
 KEY_SIMULATION_VARS = [
     "Precio_Cobre",
     "Reservas_Netas",
     "Tasa_Referencia",
-    # Agrega o cambia otras variables macro que quieras simular
+    # Puedes agregar otras variables aquí si son importantes y quieres simularlas
 ]
+# ---------------------------------------
+
+sns.set(style="whitegrid")
 
 st.set_page_config(
     page_title="Volatilidad del Tipo de Cambio",
@@ -220,7 +221,6 @@ pagina = st.sidebar.radio(
 # --------------------------------------------------------------------
 if pagina == "Inicio y línea de tiempo":
     st.title("Volatilidad del Tipo de Cambio de Venta (TC)")
-    # ... (Resto de la página sin cambios) ...
     st.subheader("Introducción")
 
     st.write("""
@@ -302,7 +302,6 @@ if pagina == "Inicio y línea de tiempo":
 
     with col2:
         st.write("**Resumen rápido:**")
-        # 🐞 CORRECCIÓN DE ERROR SINTÁCTICO: len[df_tc] -> len(df_ordenado)
         st.write(f"- Observaciones: {len(df_ordenado)}") 
         st.write(f"- TC mínimo: {df_ordenado[tc_col].min():.4f}")
         st.write(f"- TC máximo: {df_ordenado[tc_col].max():.4f}")
@@ -378,23 +377,31 @@ elif pagina == "Modelo y predicciones":
     # 5.1 Performance del modelo
     st.subheader("Performance del modelo (Evaluación Histórica)")
 
-    X = df_mod[selected_vars]
+    # X es el DataFrame de features, solo con las variables seleccionadas y ordenadas
+    X = df_mod[selected_vars] 
     y = df_mod["Rendimientos_log"]
 
     train_size = int(len(X) * 0.8)
     X_test = X.iloc[train_size:]
     y_test = y.iloc[train_size:]
-
-    # Aseguramos que las variables a imputar y escalar solo sean las seleccionadas
-    X_test_imp = imputer.transform(X_test[selected_vars])
+    
+    # -------------------------------------------------------------------
+    # 💡 CORRECCIÓN CRÍTICA: Asegurar el orden de las columnas con selected_vars
+    # -------------------------------------------------------------------
+    X_test_correct_order = X_test[selected_vars] # Asegura orden y tipos de datos
+    X_test_imp = imputer.transform(X_test_correct_order)
+    
     X_test_scaled = scaler.transform(X_test_imp)
     y_pred_test = modelo.predict(X_test_scaled)
 
     mae_test = mean_absolute_error(y_test, y_pred_test)
     rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
     r2_test = r2_score(y_test, y_pred_test)
-
-    X_all_imp = imputer.transform(X[selected_vars])
+    
+    # Evaluación en todo el histórico (in-sample)
+    X_all_correct_order = X[selected_vars]
+    X_all_imp = imputer.transform(X_all_correct_order)
+    
     X_all_scaled = scaler.transform(X_all_imp)
     y_pred_all = modelo.predict(X_all_scaled)
 
@@ -468,38 +475,36 @@ elif pagina == "Modelo y predicciones":
     # ------------------ INPUTS DE SIMULACIÓN ------------------
     st.markdown("#### Valores de Simulación para el Período Futuro")
     
+    # Filtramos KEY_SIMULATION_VARS a solo las que estén realmente en selected_vars
+    sim_vars_actual = [var for var in KEY_SIMULATION_VARS if var in ultimo_X_base.index]
+    
     # Prepara las columnas para los sliders
-    cols_sim = st.columns(len(KEY_SIMULATION_VARS))
+    cols_sim = st.columns(len(sim_vars_actual))
     
     # Diccionario para guardar los valores simulados
     simulated_values = {}
     
     # Generar Sliders para variables clave
-    for i, var in enumerate(KEY_SIMULATION_VARS):
-        if var in ultimo_X_base.index:
-            last_value = ultimo_X_base[var]
-            
-            # Definir un rango razonable basado en el último valor
-            min_val = last_value * 0.9 if last_value > 0 else last_value - abs(last_value * 0.1)
-            max_val = last_value * 1.1 if last_value > 0 else last_value + abs(last_value * 0.1)
-            
-            # Usar 4 decimales si el valor es muy pequeño (como las tasas o rendimientos)
-            step_val = 0.0001 if abs(last_value) < 1.0 else 0.01
+    for i, var in enumerate(sim_vars_actual):
+        last_value = ultimo_X_base[var]
+        
+        # Definir un rango razonable basado en el último valor
+        min_val = last_value * 0.9 if last_value > 0 else last_value - abs(last_value * 0.1)
+        max_val = last_value * 1.1 if last_value > 0 else last_value + abs(last_value * 0.1)
+        
+        # Usar 4 decimales si el valor es muy pequeño (como las tasas o rendimientos)
+        step_val = 0.0001 if abs(last_value) < 1.0 else 0.01
 
-            with cols_sim[i]:
-                simulated_values[var] = st.slider(
-                    f"Valor de {var} (último: {last_value:.4f})",
-                    min_value=float(min_val),
-                    max_value=float(max_val),
-                    value=float(last_value),
-                    step=step_val,
-                    format="%.4f"
-                )
-        else:
-            with cols_sim[i]:
-                st.warning(f"La variable '{var}' no está en 'selected_vars'.")
-                simulated_values[var] = None
-
+        with cols_sim[i]:
+            simulated_values[var] = st.slider(
+                f"Valor de {var} (último: {last_value:.4f})",
+                min_value=float(min_val),
+                max_value=float(max_val),
+                value=float(last_value),
+                step=step_val,
+                format="%.4f",
+                key=f"sim_{var}"
+            )
 
     if st.button("Calcular predicción", key="btn_prediccion"):
         
@@ -511,6 +516,7 @@ elif pagina == "Modelo y predicciones":
             anio_actual = int(anio_input)
 
             # Si el mes de inicio es el último mes de la historia, la proyección comienza al mes siguiente
+            # Esto corrige el problema de empezar en un mes que ya está en la historia
             if anio_actual == ultimo_anio and mes_actual == MAPA_MESES.get(ultimo_mes_nombre):
                 mes_actual += 1
                 if mes_actual > 12:
@@ -529,23 +535,25 @@ elif pagina == "Modelo y predicciones":
             df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
 
             # -----------------------------------------------------------
-            # 💡 LÓGICA DE ASIGNACIÓN DE FEATURES FUTUROS (CORRECCIÓN)
+            # 💡 LÓGICA DE ASIGNACIÓN DE FEATURES FUTUROS
             # -----------------------------------------------------------
             for col in selected_vars:
                 if col in ["anio", "mes_num"]:
-                    # Estas columnas ya tienen sus valores futuros correctos
                     continue
                 
-                if col in simulated_values and simulated_values[col] is not None:
-                    # Usar el valor simulado por el usuario
+                # Asigna valor simulado si existe, si no, usa el último valor histórico
+                if col in simulated_values:
                     df_futuro[col] = simulated_values[col]
                 else:
-                    # El resto de variables predictoras se mantiene constante
-                    # en su último valor histórico conocido.
                     df_futuro[col] = ultimo_X_base[col]
 
-            # Imputar + escalar igual que en el entrenamiento
-            X_fut_imp = imputer.transform(df_futuro[selected_vars])
+
+            # -----------------------------------------------------------
+            # 💡 CORRECCIÓN CRÍTICA: Asegurar el orden de las columnas con selected_vars
+            # -----------------------------------------------------------
+            X_fut_correct_order = df_futuro[selected_vars]
+            X_fut_imp = imputer.transform(X_fut_correct_order)
+            
             X_fut_scaled = scaler.transform(X_fut_imp)
 
             # Predicción directa de rendimientos logarítmicos
@@ -575,15 +583,15 @@ elif pagina == "Modelo y predicciones":
             st.dataframe(df_display, use_container_width=True)
 
             # -----------------------------------------------------------
-            # GRÁFICO FINAL
+            # GRÁFICO FINAL (El formato solicitado de forecast)
             # -----------------------------------------------------------
             fig, ax = plt.subplots(figsize=(10, 4))
             
-            # Histórico
+            # Histórico (Serie Azul)
             x_hist = np.arange(len(df_ordenado))
             ax.plot(x_hist, df_ordenado[tc_col], label="TC real (histórico)", linewidth=2, color='blue')
             
-            # Predicción
+            # Predicción (Serie Roja, Punteada)
             x_fut = np.arange(len(df_ordenado), len(df_ordenado) + num_meses)
             ax.plot(
                 x_fut,
@@ -594,6 +602,7 @@ elif pagina == "Modelo y predicciones":
                 color='red'
             )
             
+            # Línea vertical que marca el inicio de la predicción
             ax.axvline(x=len(df_ordenado) - 1, color='gray', linestyle=':', label='Fin del Histórico')
 
             ax.set_title(
@@ -606,4 +615,3 @@ elif pagina == "Modelo y predicciones":
             st.pyplot(fig)
             
             st.success("Predicción completada. Ajusta los parámetros de simulación para ver otros escenarios.")
-      
